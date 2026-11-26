@@ -1,0 +1,106 @@
+# gui_browser.py
+import sys
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (QApplication, QMainWindow, QToolBar,
+                               QLineEdit, QStatusBar)
+from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+START_PAGE = 'https://example.com'
+
+
+class Browser(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Браузер')
+        self.resize(1280, 800)
+
+        self.view = QWebEngineView(self)
+        self.setCentralWidget(self.view)
+
+        # ---- настройки движка ----
+        s = self.view.settings()
+        s.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages, True)
+        s.setAttribute(
+            QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
+        s.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+
+        # ---- панель инструментов ----
+        tb = QToolBar('Навигация')
+        tb.setMovable(False)
+        self.addToolBar(tb)
+
+        for text, slot in (('←', lambda: self.view.back()),
+                           ('→', lambda: self.view.forward()),
+                           ('⟳', lambda: self.view.reload()),
+                           ('⌂', lambda: self.navigate(START_PAGE))):
+            act = QAction(text, self)
+            act.triggered.connect(slot)
+            tb.addAction(act)
+
+        self.url_edit = QLineEdit()
+        self.url_edit.returnPressed.connect(
+            lambda: self.navigate(self.url_edit.text()))
+        tb.addWidget(self.url_edit)
+
+        # Кнопка отключения изображений
+        self.img_action = QAction('Изображения: вкл', self)
+        self.img_action.setCheckable(True)
+        self.img_action.setChecked(True)
+        self.img_action.toggled.connect(self.on_toggle_images)
+        tb.addAction(self.img_action)
+
+        # Бонус для п.4: управление автовоспроизведением видео
+        self.autoplay_action = QAction('Автовоспроизведение видео', self)
+        self.autoplay_action.setCheckable(True)
+        self.autoplay_action.setChecked(True)
+        self.autoplay_action.toggled.connect(self.on_toggle_autoplay)
+        tb.addAction(self.autoplay_action)
+
+        # ---- статус-бар ----
+        self.setStatusBar(QStatusBar())
+        self.view.loadStarted.connect(
+            lambda: self.statusBar().showMessage('Загрузка…'))
+        self.view.loadProgress.connect(
+            lambda p: self.statusBar().showMessage(f'Загрузка… {p}%'))
+        self.view.loadFinished.connect(self.on_load_finished)
+        self.view.urlChanged.connect(
+            lambda u: self.url_edit.setText(u.toString()))
+        self.view.titleChanged.connect(
+            lambda t: self.setWindowTitle(t or 'Браузер'))
+
+        self.navigate(START_PAGE)
+
+    # ---- слоты ----
+    def navigate(self, text: str):
+        text = text.strip()
+        if text:
+            self.view.setUrl(QUrl.fromUserInput(text))
+
+    def on_toggle_images(self, on: bool):
+        self.view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.AutoLoadImages, on)
+        self.img_action.setText('Изображения: вкл' if on else 'Изображения: выкл')
+        self.view.reload()          # применить к уже открытой странице
+
+    def on_toggle_autoplay(self, on: bool):
+        self.view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, not on)
+
+    def on_load_finished(self, ok: bool):
+        self.statusBar().showMessage('Готово' if ok else 'Ошибка загрузки', 4000)
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName('MiniBrowser')
+    win = Browser()
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()
